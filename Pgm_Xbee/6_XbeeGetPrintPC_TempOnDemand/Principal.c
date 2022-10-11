@@ -1,59 +1,109 @@
-A CONTINUER 
+/*
+Modif texte peda
+Ajouter "après 1 seconde : ligne 0 temp = (ligne 1 ready... ) 
+*/
+
+
 #include "clock.h"
 #include "API_ADC.h"
 #include "Timer_1234.h"
-#include "USART_rev2018.h"
-
-#include "FctDiverses.h"
-#include "API_Xbee_ModeAT.h"
+#include "USART_rev2021.h"
+#include "GPIO.h"
+#include "FctDiverses_v2.h"
+#include "API_Xbee_ModeAT_2022.h"
 #include "LCD.h"
 #include <string.h>
 
 #include "stdio.h"
 
 
-void EnvoieMessg(void);
+
+// définitions Thermomètre
+#define ResADC_to_Volt (5.0/4095.0)
+#define m (16.43)
+#define p (-26.07)
+int CNT_Moy;
+float Temperature,TemperatureMoy;
+char TempRecu;
+
+void IT_1Sec(void);
 void LCD_ClearLine_0(void);
 void LCD_ClearLine_1(void);
 
 char * ChaineRecue;
-int Seconde=0;
-char Fr[]="Bonjour";
-char Angl[]="Hello";
-char Cmde[]="Seconde";
+char Code[]="Temp?";
+
+#define XbeeMy (0xAA)
+#define XbeeMaster (0xBB)
+#define XbeeChannel (0x1A)
+#define XbeePanID (0xFF)
+
 char Reponse[50];
 
 int main (void)
 {
 CLOCK_Configure();
-Xbee_Init(0x1A, 0xFF, 0xAA);
-Xbee_Fix_DestAdress(0xBB);	
+
+// test
+	Float2Tring(25.6);
+	Float2Tring(-15.4);
+	
+// Configuration du thermomètre
+ADC_Global_Conf(PB1);
+CNT_Moy=0;	
+Temperature=0.0;
+TemperatureMoy=0.0;	
+TempRecu=0;	
+	
+// configuration Xbee	
+Xbee_Init(XbeeChannel, XbeePanID, XbeeMy);
+Xbee_Fix_DestAdress(XbeeMaster);	
 lcd_init();
+	
+// Affichage LCD Ligne 0 : « Hello ! », Ligne 1 : « Ready ...» pendant 1 seconde
 lcd_clear();
-set_cursor(0,0); lcd_print("Hello");
+set_cursor(0,0); lcd_print("Hello !");
 set_cursor(0,1); lcd_print("Ready ...");	
 
 Delay_x_ms(1000);	
 	
-Timer_1234_Init(TIM1,1e6);
-Active_IT_Debordement_Timer( TIM1, 10, EnvoieMessg);		
+Timer_1234_Init(TIM1,10000);
+Active_IT_Debordement_Timer( TIM1, 10, IT_1Sec);		
 	
 
+	
 while(1)
 	{
-		
-		ChaineRecue=Xbee_Get_Str();
-		LCD_ClearLine_0();
-		lcd_print(ChaineRecue);
-		
-		if (strcmp(ChaineRecue, Fr)==0) Xbee_Send_Str("Au revoir ... ");
-		else if (strcmp(ChaineRecue, Angl)==0) Xbee_Send_Str("Goodby ...  ");		
-		else if (strcmp(ChaineRecue, Cmde)==0) 
+		if (TempRecu==1)
 		{
-			
+			TempRecu=0;
+			// Affichage de la température de votre thermomètre sur la ligne 0
+			LCD_ClearLine_0();
+			lcd_print("Temp =");
+			lcd_print (Float2Tring(TemperatureMoy));
+			lcd_print(" °C");
+		}
+		if (Xbee_Is_Str_Received()==1)
+		{
+			    //Affichage de tout message reçu sur la ligne 1
+					ChaineRecue=Xbee_Get_Str();
+					LCD_ClearLine_1();
+					lcd_print(ChaineRecue);
+		}
+
+		//Accusé de réception «OK» sur tout message reçu différent de «Temp?»
+		if (strcmp(ChaineRecue, Code)!=0) Xbee_Send_Str("OK");
+		
+		//Sur demande «Temp?», le µC renvoie toute la température au demandeur du type : 
+    //"B1-Temp : 18.2"     (dans ce exemple B1 est le binôme interrogé)
+		else 
+		{
+			 Xbee_Send_Str("B1-Temp :");
+			 Xbee_Send_Str("Float2Tring(TemperatureMoy)");
+			 Xbee_Send_Str("°C\r");
 		}
 	
-		else 	Xbee_Send_Str("OK");
+
 		
 
 			 
@@ -62,9 +112,17 @@ while(1)
 
 
 
-void EnvoieMessg(void)
+void IT_1Sec(void)
 {
-			Seconde++;
+		Temperature+= m*ResADC_to_Volt*(float)ADC_Get_Value(PB1)+p;
+	  CNT_Moy++;
+	  if (CNT_Moy==100) 
+			{
+				CNT_Moy=0;
+				TemperatureMoy=Temperature/100.0;
+				Temperature=0;
+				
+			}
 }
 
 
@@ -78,3 +136,5 @@ void LCD_ClearLine_1 (void)
 {
 	set_cursor(0,1); lcd_print("                 ");set_cursor(0,1);
 }
+
+
