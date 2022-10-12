@@ -33,8 +33,8 @@ void LCD_ClearLine_1(void);
 char * ChaineRecue;
 char Code[]="Temp?";
 
-#define XbeeMy (0xAA)
-#define XbeeMaster (0xBB)
+#define XbeeMy (0xB2)
+#define XbeeMaster (0xAA)
 #define XbeeChannel (0x1A)
 #define XbeePanID (0xFF)
 
@@ -54,18 +54,21 @@ CNT_Moy=0;
 Temperature=0.0;
 TemperatureMoy=0.0;	
 TempRecu=0;	
+
+// Affichage LCD Ligne 0 : « Hello ! », Ligne 1 : « Ready ...» pendant 1 seconde
+lcd_init();
+lcd_clear();
+set_cursor(0,0); lcd_print("Hello !");
+set_cursor(0,1); lcd_print("Please Wait ...");	
+
+Delay_x_ms(1000);		
 	
 // configuration Xbee	
 Xbee_Init(XbeeChannel, XbeePanID, XbeeMy);
 Xbee_Fix_DestAdress(XbeeMaster);	
-lcd_init();
-	
-// Affichage LCD Ligne 0 : « Hello ! », Ligne 1 : « Ready ...» pendant 1 seconde
-lcd_clear();
-set_cursor(0,0); lcd_print("Hello !");
-set_cursor(0,1); lcd_print("Ready ...");	
 
-Delay_x_ms(1000);	
+LCD_ClearLine_1();
+set_cursor(0,1); lcd_print("Ready ...");		
 	
 Timer_1234_Init(TIM1,10000);
 Active_IT_Debordement_Timer( TIM1, 10, IT_1Sec);		
@@ -89,22 +92,22 @@ while(1)
 					ChaineRecue=Xbee_Get_Str();
 					LCD_ClearLine_1();
 					lcd_print(ChaineRecue);
+			
+				//Accusé de réception «OK» sur tout message reçu différent de «Temp?»
+				if (strcmp(ChaineRecue, Code)!=0) Xbee_Send_Str("zut");
+		
+				//Sur demande «Temp?», le µC renvoie toute la température au demandeur du type : 
+				//"B1-Temp : 18.2"     (dans ce exemple B1 est le binôme interrogé)
+				else 
+				{
+					Xbee_Send_Str("B2-Temp :");
+					Xbee_Send_Str(Float2Tring(TemperatureMoy));
+					Xbee_Send_Str("°C\r");
+				}
+			
 		}
 
-		//Accusé de réception «OK» sur tout message reçu différent de «Temp?»
-		if (strcmp(ChaineRecue, Code)!=0) Xbee_Send_Str("OK");
-		
-		//Sur demande «Temp?», le µC renvoie toute la température au demandeur du type : 
-    //"B1-Temp : 18.2"     (dans ce exemple B1 est le binôme interrogé)
-		else 
-		{
-			 Xbee_Send_Str("B1-Temp :");
-			 Xbee_Send_Str("Float2Tring(TemperatureMoy)");
-			 Xbee_Send_Str("°C\r");
-		}
-	
-
-		
+				
 
 			 
 	}	
@@ -121,7 +124,7 @@ void IT_1Sec(void)
 				CNT_Moy=0;
 				TemperatureMoy=Temperature/100.0;
 				Temperature=0;
-				
+				TempRecu=1;
 			}
 }
 
